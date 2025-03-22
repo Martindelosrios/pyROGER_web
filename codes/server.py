@@ -20,7 +20,7 @@ port = int(os.environ.get('PORT', 5000))
 UPLOAD_FOLDER = tempfile.gettempdir()
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-DATA_PATH = pkg_resources.resource_filename("pyROGER")
+DATA_PATH = pkg_resources.resource_filename("pyROGER", "dataset/")
 
 # Lista de modelos disponibles
 AVAILABLE_MODELS = {
