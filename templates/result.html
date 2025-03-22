@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Results - pyROGER</title>
+    <link href="/static/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/custom.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row">
+            <div class="col-md-8 offset-md-2">
+                <h2>Analysis Results</h2>
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Results using {{ model_name }}</h5>
+                        <!-- Matplotlib plot -->
+                        <div class="plot-container text-center mb-4">
+                            <img src="data:image/png;base64,{{ plot1 }}" 
+                                 class="img-fluid" 
+                                 alt="Analysis Plot">
+                        </div>
+                        <p class="card-text">{{ resultado }}</p>
+                        <a href="{{ url_for('download_result') }}" class="btn btn-primary">
+                            Download Result (.npy)
+                        </a>
+                        <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                            Back to Home
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/jquery-1.11.3.min.js"></script>
+    <script src="/static/bootstrap.min.js"></script>
+</body>
+</html> 
