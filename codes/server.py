@@ -20,7 +20,7 @@ port = int(os.environ.get('PORT', 5000))
 UPLOAD_FOLDER = tempfile.gettempdir()
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-DATA_PATH = pkg_resources.resource_filename("pyROGER", "dataset/")
+DATA_PATH = pkg_resources.resource_filename("pyROGER", "/pyROGER/dataset/")
 
 # Lista de modelos disponibles
 AVAILABLE_MODELS = {
@@ -52,9 +52,9 @@ def upload_file():
         
         # Aplicar el modelo seleccionado
         if selected_model == 'model1':
-            models.HighMassRoger1.train(path_to_saved_model = [DATA_PATH + 'pyROGER/HighMassRoger1_KNN.joblib',
-                                                               DATA_PATH + 'pyROGER/HighMassRoger1_RF.joblib',
-                                                               DATA_PATH + 'pyROGER/HighMassRoger1_SVM.joblib'])
+            models.HighMassRoger1.train(path_to_saved_model = [DATA_PATH + 'HighMassRoger1_KNN.joblib',
+                                                               DATA_PATH + 'HighMassRoger1_RF.joblib',
+                                                               DATA_PATH + 'HighMassRoger1_SVM.joblib'])
             # Usar ROGER para clusters masivos
             pred_class = models.HighMassRoger1.predict_class(selected_data, n_model=0)
             pred_prob = models.HighMassRoger1.predict_prob(selected_data, n_model=0)
