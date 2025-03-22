@@ -66,7 +66,7 @@
                     <img class="img-responsive img-circle center-block" src="/static/roger.png" alt="">
                 </div>
                     <h1>pyROGER</h1>
-                    <h3>Recstructing Orbits of Galaxies in Extreme Regions using machine learning techniques.</h3>
+                    <h3>Reconstructing Orbits of Galaxies in Extreme Regions using machine learning techniques.</h3>
             </div>
         </div>
     </header>
@@ -114,11 +114,49 @@
                 </div>
                 <div class="col-sm-6">
 	                <h2 id='running' class="section-header">Online Analysis</h2>
-                    <h1>Subir archivo .npy</h1>
-                    <form action="/upload" method="post" enctype="multipart/form-data">
-                        <input type="file" name="file" accept=".npy">
-                        <input type="submit" value="Subir">
-                    </form>                  
+                    <div class="upload-section">
+                        <h3>Upload .npy file for analysis</h3>
+                        <form action="/upload" method="post" enctype="multipart/form-data" class="form-group">
+                            <div class="mb-4">
+                                <label for="modelSelect" class="form-label">Select Analysis Model:</label>
+                                <select class="form-select" id="modelSelect" name="model">
+                                    {% for model_id, model_name in models.items() %}
+                                    <option value="{{ model_id }}">{{ model_name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-4">
+                                <label for="fileInput" class="form-label">Choose File:</label>
+                                <input type="file" 
+                                       id="fileInput" 
+                                       name="file" 
+                                       accept=".npy" 
+                                       class="form-control"
+                                       onchange="handleFileSelect(this)">
+                            </div>
+                            <div class="mb-4" id="columnSelectors" style="display: none;">
+                                <div class="alert alert-info" role="alert">
+                                    <small>Please select which columns in your data correspond to R/R200 and V/V200 values. 
+                                    By default, columns 3 and 4 are selected.</small>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="rColumn" class="form-label">R/R200 Column:</label>
+                                        <select class="form-select" id="rColumn" name="r_column">
+                                            <!-- Options will be filled dynamically -->
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="vColumn" class="form-label">V/V200 Column:</label>
+                                        <select class="form-select" id="vColumn" name="v_column">
+                                            <!-- Options will be filled dynamically -->
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Process File</button>
+                        </form>
+                    </div>                  
                 </div>    
             </div>
         </div>
@@ -148,6 +186,61 @@
     <!-- Custom Javascript -->
     <script src="/static/custom.js"></script>
 
+    <script>
+    function handleFileSelect(input) {
+        const file = input.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                // Leer el archivo como un ArrayBuffer
+                const buffer = e.target.result;
+                
+                // Los primeros 6 bytes del archivo .npy contienen la cabecera
+                // Los siguientes bytes contienen la información de la forma del array
+                const headerLength = new DataView(buffer.slice(8, 10)).getUint8(0);
+                const headerStr = new TextDecoder().decode(new Uint8Array(buffer.slice(10, 10 + headerLength)));
+                
+                // Extraer la forma del array de la cabecera
+                const shapeMatch = headerStr.match(/\'shape\': \((\d+), (\d+)\)/);
+                if (shapeMatch) {
+                    const numRows = parseInt(shapeMatch[1]);
+                    const numCols = parseInt(shapeMatch[2]);
+                    
+                    // Clear previous options
+                    const rSelect = document.getElementById('rColumn');
+                    const vSelect = document.getElementById('vColumn');
+                    rSelect.innerHTML = '';
+                    vSelect.innerHTML = '';
+                    
+                    // Add options for each column
+                    for (let i = 0; i < numCols; i++) {
+                        const option1 = document.createElement('option');
+                        const option2 = document.createElement('option');
+                        option1.value = option2.value = i;
+                        option1.text = option2.text = `Column ${i}`;
+                        
+                        // Set default selections for R/R200 (column 3) and V/V200 (column 4)
+                        if (i === 3) {
+                            option1.selected = true;
+                        }
+                        if (i === 4) {
+                            option2.selected = true;
+                        }
+                        
+                        rSelect.appendChild(option1);
+                        vSelect.appendChild(option2.cloneNode(true));
+                    }
+                    
+                    // Show the column selectors
+                    document.getElementById('columnSelectors').style.display = 'block';
+                } else {
+                    alert('Invalid .npy file format');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+    }
+    </script>
 
 </body>
 </html>
