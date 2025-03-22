@@ -62,9 +62,10 @@ def upload_file():
             
         elif selected_model == 'model2':
             # Usar ROGER para clusters pequeños
-            roger_model = roger.ROGER(model_type='small_mass')  # Ejemplo
-            resultado = roger_model.predict(data)
-            plot_title = 'ROGER Analysis - Small Mass Clusters'
+            #roger_model = roger.ROGER(model_type='small_mass')  # Ejemplo
+            pred_class = np.round(data[:,0])
+            pred_prob = np.random.uniform(size = (len(data), 5))
+            plot_title = DATA_PATH#'ROGER Analysis - Small Mass Clusters'
             
         elif selected_model == 'model3':
             # Usar ROGER v2
@@ -77,7 +78,7 @@ def upload_file():
 
         plt.subplots_adjust(wspace=0) 
         # Definir títulos y probabilidades para cada panel
-        titles = ['$P_{CL}$', '$P_{BS}$', '$P_{RIN}$', '$P_{IN}$', '$P_{ITL}$']
+        titles = [DATA_PATH, '$P_{BS}$', '$P_{RIN}$', '$P_{IN}$', '$P_{ITL}$']
         cmaps = ['Reds', 'Oranges', 'Greens', 'Blues', 'Greys']
         
         # Crear los 5 paneles
