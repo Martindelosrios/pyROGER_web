@@ -126,39 +126,12 @@ def upload_file():
         # Save results
         result_path = os.path.join(UPLOAD_FOLDER, "resultado.npy")
         np.savez(result_path, 
-                 classes=pred_prob, 
+                 classes=pred_class, 
                  probabilities=pred_prob)
-
-        # Obtener listado de archivos en DATA_PATH
-        try:
-            print(f"Trying to read DATA_PATH: {DATA_PATH}")  # Debug print
-            if os.path.exists(DATA_PATH):
-                # Listar todos los archivos y directorios
-                all_files = []
-                for root, dirs, files in os.walk(DATA_PATH):
-                    for file in files:
-                        full_path = os.path.join(root, file)
-                        rel_path = os.path.relpath(full_path, DATA_PATH)
-                        all_files.append(f"{rel_path} ({full_path})")
-                
-                if all_files:
-                    data_files = all_files
-                    print(f"Found {len(data_files)} files in {DATA_PATH}")
-                else:
-                    data_files = ["Directory is empty"]
-                    print(f"No files found in {DATA_PATH}")
-            else:
-                data_files = [f"DATA_PATH does not exist: {os.path.abspath(DATA_PATH)}"]
-                print(f"DATA_PATH not found: {os.path.abspath(DATA_PATH)}")
-        except Exception as e:
-            data_files = [f"Error reading DATA_PATH ({os.path.abspath(DATA_PATH)}): {str(e)}"]
-            print(f"Error reading DATA_PATH: {str(e)}")
 
         return render_template("result.html", 
                              plot1=img_data,
-                             model_name=AVAILABLE_MODELS[selected_model],
-                             data_path=os.path.abspath(DATA_PATH),
-                             data_files=data_files)
+                             model_name=AVAILABLE_MODELS[selected_model])
 
     return "Invalid format. Please upload a .npy file"
 
