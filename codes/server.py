@@ -20,7 +20,24 @@ port = int(os.environ.get('PORT', 5000))
 UPLOAD_FOLDER = tempfile.gettempdir()
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-DATA_PATH = pkg_resources.resource_filename("pyROGER", "/dataset/")
+# Obtener la ruta absoluta del DATA_PATH
+DATA_PATH = pkg_resources.resource_filename("pyROGER", "../dataset/")
+print(f"Initial DATA_PATH: {DATA_PATH}")  # Debug print
+
+# Verificar si el directorio existe
+if not os.path.exists(DATA_PATH):
+    print(f"DATA_PATH no existe, intentando rutas alternativas")
+    # Intentar encontrar la ruta correcta
+    possible_paths = [
+        os.path.join(os.path.dirname(__file__), "../dataset/"),
+        os.path.join(os.path.dirname(__file__), "../../dataset/"),
+        pkg_resources.resource_filename("pyROGER", "dataset/"),
+    ]
+    for path in possible_paths:
+        if os.path.exists(path):
+            DATA_PATH = path
+            print(f"Found valid DATA_PATH: {DATA_PATH}")
+            break
 
 # Lista de modelos disponibles
 AVAILABLE_MODELS = {
@@ -52,9 +69,9 @@ def upload_file():
         
         # Aplicar el modelo seleccionado
         if selected_model == 'model1':
-            models.HighMassRoger1.train(path_to_saved_model = [DATA_PATH + 'HighMassRoger1_KNN.joblib',
-                                                               DATA_PATH + 'HighMassRoger1_RF.joblib',
-                                                               DATA_PATH + 'HighMassRoger1_SVM.joblib'])
+            models.HighMassRoger1.train(path_to_saved_model = [DATA_PATH + '/HighMassRoger1_KNN.joblib',
+                                                               DATA_PATH + '/HighMassRoger1_RF.joblib',
+                                                               DATA_PATH + '/HighMassRoger1_SVM.joblib'])
             # Usar ROGER para clusters masivos
             pred_class = models.HighMassRoger1.predict_class(selected_data, n_model=0)
             pred_prob = models.HighMassRoger1.predict_prob(selected_data, n_model=0)
@@ -62,10 +79,9 @@ def upload_file():
             
         elif selected_model == 'model2':
             # Usar ROGER para clusters pequeños
-            #roger_model = roger.ROGER(model_type='small_mass')  # Ejemplo
-            pred_class = np.round(data[:,0])
-            pred_prob = np.random.uniform(size = (len(data), 5))
-            plot_title = DATA_PATH#'ROGER Analysis - Small Mass Clusters'
+            roger_model = roger.ROGER(model_type='small_mass')  # Ejemplo
+            resultado = roger_model.predict(data)
+            plot_title = 'ROGER Analysis - Small Mass Clusters'
             
         elif selected_model == 'model3':
             # Usar ROGER v2
@@ -78,7 +94,7 @@ def upload_file():
 
         plt.subplots_adjust(wspace=0) 
         # Definir títulos y probabilidades para cada panel
-        titles = [DATA_PATH, '$P_{BS}$', '$P_{RIN}$', '$P_{IN}$', '$P_{ITL}$']
+        titles = ['$P_{CL}$', '$P_{BS}$', '$P_{RIN}$', '$P_{IN}$', '$P_{ITL}$']
         cmaps = ['Reds', 'Oranges', 'Greens', 'Blues', 'Greys']
         
         # Crear los 5 paneles
@@ -88,7 +104,7 @@ def upload_file():
                                cmap=cmaps[i],
                                c=pred_prob[:,i],
                                s=50)
-            #ax.set_title(titles[i])
+            ax.set_title(titles[i])
             ax.set_xlabel('R/R200')
             ax.grid(True)
             
@@ -96,8 +112,7 @@ def upload_file():
             ax.set_xlim(0, max(data[:, r_column])*1.1)
             ax.set_ylim(min(data[:, v_column])*1.1, max(data[:, v_column])*1.1)
             ax.set_ylabel('')
-        axes[0].set_title(titles[0])
-        axes[0].set_ylabel('V/V200')
+        axes[0].set_ylabel('Vu/V200')
         plt.tight_layout()
 
         # Save plot to buffer
@@ -113,9 +128,36 @@ def upload_file():
                  classes=pred_prob, 
                  probabilities=pred_prob)
 
+        # Obtener listado de archivos en DATA_PATH
+        try:
+            print(f"Trying to read DATA_PATH: {DATA_PATH}")  # Debug print
+            if os.path.exists(DATA_PATH):
+                # Listar todos los archivos y directorios
+                all_files = []
+                for root, dirs, files in os.walk(DATA_PATH):
+                    for file in files:
+                        full_path = os.path.join(root, file)
+                        rel_path = os.path.relpath(full_path, DATA_PATH)
+                        all_files.append(f"{rel_path} ({full_path})")
+                
+                if all_files:
+                    data_files = all_files
+                    print(f"Found {len(data_files)} files in {DATA_PATH}")
+                else:
+                    data_files = ["Directory is empty"]
+                    print(f"No files found in {DATA_PATH}")
+            else:
+                data_files = [f"DATA_PATH does not exist: {os.path.abspath(DATA_PATH)}"]
+                print(f"DATA_PATH not found: {os.path.abspath(DATA_PATH)}")
+        except Exception as e:
+            data_files = [f"Error reading DATA_PATH ({os.path.abspath(DATA_PATH)}): {str(e)}"]
+            print(f"Error reading DATA_PATH: {str(e)}")
+
         return render_template("result.html", 
                              plot1=img_data,
-                             model_name=AVAILABLE_MODELS[selected_model])
+                             model_name=AVAILABLE_MODELS[selected_model],
+                             data_path=os.path.abspath(DATA_PATH),
+                             data_files=data_files)
 
     return "Invalid format. Please upload a .npy file"
 

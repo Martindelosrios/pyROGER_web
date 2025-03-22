@@ -12,6 +12,26 @@
         <div class="row">
             <div class="col-md-8 offset-md-2">
                 <h2>Analysis Results</h2>
+                
+                <!-- DATA_PATH Info -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h5 class="card-title">DATA_PATH Information</h5>
+                        <p><strong>Path:</strong> {{ data_path }}</p>
+                        <p><strong>Contents:</strong></p>
+                        <ul class="list-group">
+                            {% if data_files %}
+                                {% for file in data_files %}
+                                <li class="list-group-item">{{ file }}</li>
+                                {% endfor %}
+                            {% else %}
+                                <li class="list-group-item">No files found</li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Results -->
                 <div class="card">
                     <div class="card-body">
                         <h5 class="card-title">Results using {{ model_name }}</h5>
