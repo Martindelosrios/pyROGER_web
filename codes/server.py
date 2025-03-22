@@ -96,6 +96,7 @@ def upload_file():
             ax.set_xlim(0, max(data[:, r_column])*1.1)
             ax.set_ylim(min(data[:, v_column])*1.1, max(data[:, v_column])*1.1)
             ax.set_ylabel('')
+        axes[0].set_title(titles[0])
         axes[0].set_ylabel('V/V200')
         plt.tight_layout()
 
