@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
+
+    <title>pyROGER-Website</title>
+
+    <!-- Bootstrap Core CSS -->
+    <link href="/static/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Custom CSS: You can use this stylesheet to override any Bootstrap styles and/or apply your own styles -->
+    <link href="/static/custom.css" rel="stylesheet">
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800' rel='stylesheet' type='text/css'>
+    
+</head>
+
+
+<body>
+
+    <!-- Navigation -->
+    <nav id="siteNav" class="navbar navbar-default navbar-fixed-top" role="navigation">
+        <div class="container">
+            <!-- Logo and responsive toggle -->
+            <div class="navbar-header">
+                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#navbar">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+            </div>
+            <!-- Navbar links -->
+            <div class="collapse navbar-collapse" id="navbar">
+                <ul class="nav navbar-nav navbar-right">
+                    <li class="active">
+                        <a href="#home">Home</a>
+                    </li>
+                    <li>
+                        <a href="#publications">Publications</a>
+                    </li>
+	                <li>
+                        <a href="#running">Online Analysis</a>
+                    </li>
+	                <li>
+                        <a href="https://github.com/Martindelosrios/pyROGER">Github Repository</a>
+                    </li>
+	                <li>
+                        <a href="#contact">Contact</a>
+                    </li>
+                </ul>
+                
+            </div><!-- /.navbar-collapse -->
+        </div><!-- /.container -->
+    </nav>
+
+	<!-- Header -->
+    <header>
+        <div class="header-content">
+            <div class="header-content-inner">
+                <div class="col-sm-6">
+                    <img class="img-responsive img-circle center-block" src="/static/roger.png" alt="">
+                </div>
+                    <h1>pyROGER</h1>
+                    <h3>Reconstructing Orbits of Galaxies in Extreme Regions using machine learning techniques.</h3>
+            </div>
+        </div>
+    </header>
+
+	<!-- Intro Section -->
+    <!-- <section class="intro"> -->
+    <section class="content content-2">
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-8 col-lg-offset-2">
+                    <h2 class="section-heading">About pyROGER</h2>
+                    <p class="text-light">
+                        ROGER is amazing
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+	<!-- Content 1 -->
+    <section class="content">
+        <div class="container">
+            <div class="row">
+                <div class="col-sm-6">
+                    <img class="img-responsive img-circle center-block" src="/static/salinas.jpeg" alt="">
+                </div>
+                <div class="col-sm-6">
+                  <h2 id='publications' class="section-header">Publications</h2>
+                  <ul> 
+                    <li><a href="https://arxiv.org/abs/2010.11959" target="_blank"> ROGER: Reconstructing Orbits of Galaxies in Extreme Regions using machine learning techniques</a></li>
+                    <li><a href="https://arxiv.org/abs/2112.01552" target="_blank">Reconstructing Orbits of Galaxies in Extreme Regions (ROGER) II: reliability of projected phase-space in our understanding of galaxy populations</a></li>
+                    <li><a href="https://arxiv.org/abs/2212.09780" target="_blank">Reconstructing Orbits of Galaxies in Extreme Regions (ROGER) III: galaxy evolution patterns in projected phase space around massive X-ray clusters</a></li>
+                    <li><a href="https://arxiv.org/abs/2307.13037" target="_blank">Backsplash galaxies and their impact on galaxy evolution: a three-stage, four-type perspective</a></li>
+                  </ul>
+                </div>                
+            </div>
+        </div>
+    </section>
+
+    <section class="content_content-3">
+        <div class="container">
+            <div class="row">
+                <div class="col-sm-6">
+                    <img class="img-responsive img-circle center-block" src="/static/purma.jpg" alt="">
+                </div>
+                <div class="col-sm-6">
+	                <h2 id='running' class="section-header">Online Analysis</h2>
+                    <div class="upload-section">
+                        <h3>Upload .npy file for analysis</h3>
+                        <form action="/upload" method="post" enctype="multipart/form-data" class="form-group">
+                            <div class="mb-4">
+                                <label for="modelSelect" class="form-label">Select Analysis Model:</label>
+                                <select class="form-select" id="modelSelect" name="model">
+                                    {% for model_id, model_name in models.items() %}
+                                    <option value="{{ model_id }}">{{ model_name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-4">
+                                <label for="fileInput" class="form-label">Choose File:</label>
+                                <input type="file" 
+                                       id="fileInput" 
+                                       name="file" 
+                                       accept=".npy" 
+                                       class="form-control"
+                                       onchange="handleFileSelect(this)">
+                            </div>
+                            <div class="mb-4" id="columnSelectors" style="display: none;">
+                                <div class="alert alert-info" role="alert">
+                                    <small>Please select which columns in your data correspond to R/R200 and V/V200 values. 
+                                    By default, columns 3 and 4 are selected.</small>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="rColumn" class="form-label">R/R200 Column:</label>
+                                        <select class="form-select" id="rColumn" name="r_column">
+                                            <!-- Options will be filled dynamically -->
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="vColumn" class="form-label">V/V200 Column:</label>
+                                        <select class="form-select" id="vColumn" name="v_column">
+                                            <!-- Options will be filled dynamically -->
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Process File</button>
+                        </form>
+                    </div>                  
+                </div>    
+            </div>
+        </div>
+    </section>    
+
+    <!-- Footer -->
+    <footer class="page-footer">
+    
+    	<!-- Contact Us -->
+        <div class="contact">
+          <div class="container">
+	    <h2 id='contact' class="section-heading">Contact Us</h2>
+	    <p><span class="glyphicon glyphicon-envelope"></span><br> mdelosri@sissa.it</p>
+	    <p><span class="glyphicon glyphicon-envelope"></span><br> martindelosrios13@gmail.com</p>
+          </div>
+        </div>
+      
+    <!-- jQuery -->
+    <script src="/static/jquery-1.11.3.min.js"></script>
+
+    <!-- Bootstrap Core JavaScript -->
+    <script src="/static/bootstrap.min.js"></script>
+
+    <!-- Plugin JavaScript -->
+    <script src="/static/jquery.easing.min.js"></script>
+    
+    <!-- Custom Javascript -->
+    <script src="/static/custom.js"></script>
+
+    <script>
+    function handleFileSelect(input) {
+        const file = input.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                // Leer el archivo como un ArrayBuffer
+                const buffer = e.target.result;
+                
+                // Los primeros 6 bytes del archivo .npy contienen la cabecera
+                // Los siguientes bytes contienen la información de la forma del array
+                const headerLength = new DataView(buffer.slice(8, 10)).getUint8(0);
+                const headerStr = new TextDecoder().decode(new Uint8Array(buffer.slice(10, 10 + headerLength)));
+                
+                // Extraer la forma del array de la cabecera
+                const shapeMatch = headerStr.match(/\'shape\': \((\d+), (\d+)\)/);
+                if (shapeMatch) {
+                    const numRows = parseInt(shapeMatch[1]);
+                    const numCols = parseInt(shapeMatch[2]);
+                    
+                    // Clear previous options
+                    const rSelect = document.getElementById('rColumn');
+                    const vSelect = document.getElementById('vColumn');
+                    rSelect.innerHTML = '';
+                    vSelect.innerHTML = '';
+                    
+                    // Add options for each column
+                    for (let i = 0; i < numCols; i++) {
+                        const option1 = document.createElement('option');
+                        const option2 = document.createElement('option');
+                        option1.value = option2.value = i;
+                        option1.text = option2.text = `Column ${i}`;
+                        
+                        // Set default selections for R/R200 (column 3) and V/V200 (column 4)
+                        if (i === 3) {
+                            option1.selected = true;
+                        }
+                        if (i === 4) {
+                            option2.selected = true;
+                        }
+                        
+                        rSelect.appendChild(option1);
+                        vSelect.appendChild(option2.cloneNode(true));
+                    }
+                    
+                    // Show the column selectors
+                    document.getElementById('columnSelectors').style.display = 'block';
+                } else {
+                    alert('Invalid .npy file format');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+    }
+    </script>
+
+</body>
+</html>
+
