@@ -20,7 +20,7 @@ port = int(os.environ.get('PORT', 5000))
 UPLOAD_FOLDER = tempfile.gettempdir()
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-DATA_PATH = pkg_resources.resource_filename("pyROGER", "../dataset/")
+DATA_PATH = pkg_resources.resource_filename("pyROGER")
 
 # Lista de modelos disponibles
 AVAILABLE_MODELS = {
@@ -88,7 +88,7 @@ def upload_file():
                                cmap=cmaps[i],
                                c=pred_prob[:,i],
                                s=50)
-            ax.set_title(titles[i])
+            #ax.set_title(titles[i])
             ax.set_xlabel('R/R200')
             ax.grid(True)
             
