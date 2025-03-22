@@ -79,8 +79,9 @@ def upload_file():
             
         elif selected_model == 'model2':
             # Usar ROGER para clusters pequeños
-            roger_model = roger.ROGER(model_type='small_mass')  # Ejemplo
-            resultado = roger_model.predict(data)
+            #roger_model = roger.ROGER(model_type='small_mass')  # Ejemplo
+            pred_class = np.round(data[:,0])
+            pred_prob = np.random.uniform(size=(len(data),5)) 
             plot_title = 'ROGER Analysis - Small Mass Clusters'
             
         elif selected_model == 'model3':
