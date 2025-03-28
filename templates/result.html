@@ -61,15 +61,40 @@
                          aria-labelledby="validation-tab">
                         <div class="card">
                             <div class="card-body">
+                                <!-- Density Plots -->
                                 <div class="plot-container text-center mb-4">
+                                    <h5>Real Class Distribution</h5>
+                                    <img src="data:image/png;base64,{{ plot_density }}" 
+                                         class="img-fluid" 
+                                         alt="Density Plots">
+                                </div>
+
+                                <!-- Confusion Matrix Plot -->
+                                <div class="plot-container text-center mb-4">
+                                    <h5>Confusion Matrix</h5>
+                                    <img src="data:image/png;base64,{{ plot_conf }}" 
+                                         class="img-fluid" 
+                                         alt="Confusion Matrix Plot">
+                                </div>
+
+                                <!-- Phase Space Plot -->
+                                <div class="plot-container text-center mb-4">
+                                    <h5>Predicted Probabilities</h5>
                                     <img src="data:image/png;base64,{{ plot2 }}" 
                                          class="img-fluid" 
                                          alt="Validation Analysis Plot">
                                 </div>
+
+                                <!-- Download Buttons -->
                                 <div class="text-center">
-                                    <a href="{{ url_for('download_validation_result') }}" class="btn btn-success">
-                                        Download Validation Results
-                                    </a>
+                                    <div class="btn-group">
+                                        <a href="{{ url_for('download_validation_result') }}" class="btn btn-success">
+                                            Download Validation Results
+                                        </a>
+                                        <a href="{{ url_for('download_confusion_matrix') }}" class="btn btn-info">
+                                            Download Confusion Matrix
+                                        </a>
+                                    </div>
                                 </div>
                             </div>
                         </div>

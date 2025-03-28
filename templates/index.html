@@ -179,20 +179,25 @@
                             <!-- Column Selectors for Validation Set -->
                             <div class="mb-4" id="validationColumnSelectors" style="display: none;">
                                 <div class="alert alert-info" role="alert">
-                                    <small>Select columns for validation set (same format as training set)</small>
+                                    <small>Select columns for validation set. The 'Real Class' column is required for validation.</small>
                                 </div>
                                 <div class="row">
-                                    <div class="col-md-4">
+                                    <div class="col-md-3">
+                                        <label for="realClassColumn" class="form-label">Real Class Column:</label>
+                                        <select class="form-select" id="realClassColumn" name="real_class_column" required>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
                                         <label for="vRColumn" class="form-label">R/R200 Column:</label>
                                         <select class="form-select" id="vRColumn" name="validation_r_column">
                                         </select>
                                     </div>
-                                    <div class="col-md-4">
+                                    <div class="col-md-3">
                                         <label for="vVColumn" class="form-label">V/V200 Column:</label>
                                         <select class="form-select" id="vVColumn" name="validation_v_column">
                                         </select>
                                     </div>
-                                    <div class="col-md-4">
+                                    <div class="col-md-3">
                                         <label for="vMColumn" class="form-label">logM Column:</label>
                                         <select class="form-select" id="vMColumn" name="validation_m_column">
                                         </select>
@@ -234,18 +239,20 @@
     <script>
     function updateColumnSelectors(numCols, columnSelectorsId) {
         // Determinar qué conjunto de selectores actualizar
-        let rSelect, vSelect, mSelect;
+        let rSelect, vSelect, mSelect, realClassSelect;
         if (columnSelectorsId === 'columnSelectors') {
             rSelect = document.getElementById('rColumn');
             vSelect = document.getElementById('vColumn');
             mSelect = document.getElementById('mColumn');
         } else {
+            realClassSelect = document.getElementById('realClassColumn');
             rSelect = document.getElementById('vRColumn');
             vSelect = document.getElementById('vVColumn');
             mSelect = document.getElementById('vMColumn');
         }
 
         // Clear previous options
+        if (realClassSelect) realClassSelect.innerHTML = '';
         rSelect.innerHTML = '';
         vSelect.innerHTML = '';
         mSelect.innerHTML = '';
@@ -258,16 +265,18 @@
             option1.value = option2.value = option3.value = i;
             option1.text = option2.text = option3.text = `Column ${i}`;
             
+            if (columnSelectorsId === 'validationColumnSelectors') {
+                const optionRC = document.createElement('option');
+                optionRC.value = i;
+                optionRC.text = `Column ${i}`;
+                if (i === 0) optionRC.selected = true;  // Primera columna por defecto para real_class
+                realClassSelect.appendChild(optionRC);
+            }
+            
             // Set default selections
-            if (i === 3) {
-                option1.selected = true;
-            }
-            if (i === 4) {
-                option2.selected = true;
-            }
-            if (i === 5) {
-                option3.selected = true;
-            }
+            if (i === 3) option1.selected = true;
+            if (i === 4) option2.selected = true;
+            if (i === 5) option3.selected = true;
             
             rSelect.appendChild(option1);
             vSelect.appendChild(option2.cloneNode(true));

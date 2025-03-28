@@ -6,6 +6,8 @@ import io
 import base64
 import pkg_resources
 import tempfile
+from mlxtend.plotting import plot_confusion_matrix
+from scipy.stats import gaussian_kde
 
 from pyROGER import roger
 from pyROGER import models
@@ -66,6 +68,7 @@ def upload_file():
     v_r_column = int(request.form.get('validation_r_column', r_column))
     v_v_column = int(request.form.get('validation_v_column', v_column))
     v_m_column = int(request.form.get('validation_m_column', m_column))
+    real_class_column = int(request.form.get('real_class_column', 0))  # Por defecto primera columna
 
     # Definir variables para plotting
     titles = ['$P_{CL}$', '$P_{BS}$', '$P_{RIN}$', '$P_{IN}$', '$P_{ITL}$']
@@ -84,13 +87,23 @@ def upload_file():
         # Procesar archivo de validación si existe
         validation_data = None
         if validation_file and (validation_file.filename.endswith(".npy") or validation_file.filename.endswith(".dat")):
-            val_filepath = os.path.join(UPLOAD_FOLDER, validation_file.filename)
-            validation_file.save(val_filepath)
-            
-            if validation_file.filename.endswith(".npy"):
-                validation_data = np.load(val_filepath)
-            else:
-                validation_data = np.loadtxt(val_filepath)
+            try:
+                val_filepath = os.path.join(UPLOAD_FOLDER, validation_file.filename)
+                validation_file.save(val_filepath)
+                
+                if validation_file.filename.endswith(".npy"):
+                    validation_data = np.load(val_filepath)
+                else:
+                    validation_data = np.loadtxt(val_filepath)
+                
+                # Verificar que existe la columna real_class
+                if real_class_column >= validation_data.shape[1]:
+                    raise ValueError("Validation set must contain a 'real class' column")
+                
+                real_classes = validation_data[:, real_class_column]
+                
+            except Exception as e:
+                return f"Error processing validation file: {str(e)}"
 
         # Aplicar el modelo seleccionado
         if selected_model == 'model1':
@@ -109,13 +122,69 @@ def upload_file():
             
             plot_title = 'ROGER Analysis - High Mass Clusters'
             
-            # Si hay datos de validación, procesarlos también
+            # Crear plots para el dataset principal
+            fig, axes = plt.subplots(1, 5, figsize=(10, 2), sharey=True, sharex=True)
+            plt.subplots_adjust(wspace=0) 
+            
+            # Crear los 5 paneles
+            for i, ax in enumerate(axes):
+                scatter = ax.scatter(data[:, r_column], 
+                                   data[:, v_column],
+                                   cmap=cmaps[i],
+                                   c=pred_prob[:,i],
+                                   s=50)
+                ax.set_title(titles[i])
+                ax.set_xlabel('R/R200')
+                ax.grid(True)
+                
+                ax.set_xlim(0, max(data[:, r_column])*1.1)
+                ax.set_ylim(min(data[:, v_column])*1.1, max(data[:, v_column])*1.1)
+                ax.set_ylabel('')
+            axes[0].set_ylabel('V/V200')
+            plt.tight_layout()
+
+            # Save plot to buffer
+            img_buf = io.BytesIO()
+            plt.savefig(img_buf, format='png', bbox_inches='tight', dpi=300)
+            img_buf.seek(0)
+            img_data = base64.b64encode(img_buf.read()).decode('utf-8')
+            plt.close()
+
+            # Variables para almacenar plots de validación
+            plot2_data = None
+            plot_conf_data = None
+            plot_density_data = None
+
+            # Si hay datos de validación, procesarlos
             if validation_data is not None:
                 val_selected_data = np.column_stack((validation_data[:, v_r_column], 
                                                    validation_data[:, v_v_column]))
                 val_pred_prob = models.HighMassRoger1.predict_prob(val_selected_data, n_model=0)
                 val_pred_prob[:, [2, 1]] = val_pred_prob[:, [1, 2]]
                 
+                conf_mat, pred_class = models.HighMassRoger1.confusion_matrix(
+                    thresholds=np.array([0.5, 0.5, 0.5, 0.5, 0.5]),
+                    pred_prob=val_pred_prob,
+                    real_class=real_classes
+                )
+
+                # Guardar matriz de confusión
+                conf_mat_path = os.path.join(UPLOAD_FOLDER, "confusion_matrix.dat")
+                header = "CL BS RIN IN ITL"
+                np.savetxt(conf_mat_path, conf_mat, fmt='%.6f', header=header)
+
+                # Crear plot de matriz de confusión
+                fig_conf = plt.figure(figsize=(8, 6))
+                plot_confusion_matrix(conf_mat, show_absolute=True, show_normed=True,
+                                    class_names=['CL','BS','RIN','IN','ITL'])
+                
+                # Save confusion matrix plot to buffer
+                img_buf_conf = io.BytesIO()
+                plt.savefig(img_buf_conf, format='png', bbox_inches='tight', dpi=300)
+                img_buf_conf.seek(0)
+                plot_conf_data = base64.b64encode(img_buf_conf.read()).decode('utf-8')
+                plt.close(fig_conf)
+
                 # Crear plot para datos de validación
                 fig2, axes2 = plt.subplots(1, 5, figsize=(10, 2), sharey=True, sharex=True)
                 plt.subplots_adjust(wspace=0)
@@ -143,10 +212,77 @@ def upload_file():
                 plot2_data = base64.b64encode(img_buf2.read()).decode('utf-8')
                 plt.close(fig2)
 
-                # Guardar resultados de validación
+                # Guardar resultados de validación incluyendo real_class
                 val_result_path = os.path.join(UPLOAD_FOLDER, "validation_resultado.dat")
-                header = "P_CL P_BS P_RIN P_IN P_ITL"
-                np.savetxt(val_result_path, val_pred_prob, fmt='%.6f', header=header)
+                header = "real_class P_CL P_BS P_RIN P_IN P_ITL"
+                # Combinar real_class con probabilidades
+                val_results = np.column_stack((real_classes, val_pred_prob))
+                np.savetxt(val_result_path, val_results, fmt='%.6f', header=header)
+
+                # Crear plots de densidad por clase
+                fig_density = plt.figure(figsize=(15, 3))
+                class_names = ['CL', 'BS', 'RIN', 'IN', 'ITL']
+                
+                # Crear todos los subplots primero
+                axes = []
+                for i in range(5):
+                    ax = plt.subplot(1, 5, i+1)
+                    ax.set_title(class_names[i])
+                    ax.set_xlabel('R/R200')
+                    if i == 0:  # Solo para el primer plot
+                        ax.set_ylabel('V/V200')
+                    ax.grid(True)
+                    axes.append(ax)
+
+                # Establecer límites comunes para todos los plots
+                x_max = max(validation_data[:, v_r_column])*1.1
+                y_min = min(validation_data[:, v_v_column])*1.1
+                y_max = max(validation_data[:, v_v_column])*1.1
+
+                # Aplicar límites a todos los axes
+                for ax in axes:
+                    ax.set_xlim(0, x_max)
+                    ax.set_ylim(y_min, y_max)
+                
+                # Llenar solo los paneles que tienen datos
+                for i, (class_name, cmap) in enumerate(zip(class_names, cmaps)):
+                    mask = real_classes == (i+1)
+                    if np.any(mask):  # Solo si hay datos para esta clase
+                        # Datos para la clase actual
+                        x = validation_data[mask, v_r_column]
+                        y = validation_data[mask, v_v_column]
+                        
+                        # Calcular la densidad
+                        xy = np.vstack([x, y])
+                        z = gaussian_kde(xy)(xy)
+                        
+                        # Normalizar z para que esté entre 0 y 1
+                        z = (z - z.min()) / (z.max() - z.min())
+                        
+                        # Ordenar los puntos por densidad
+                        idx = z.argsort()
+                        x, y, z = x[idx], y[idx], z[idx]
+                        
+                        # Crear scatter plot usando el mismo colormap que en val_pred_prob
+                        scatter = axes[i].scatter(x, y, c=z, s=50, cmap=cmap)
+
+                plt.tight_layout()
+                
+                # Save density plots to buffer
+                img_buf_density = io.BytesIO()
+                plt.savefig(img_buf_density, format='png', bbox_inches='tight', dpi=300)
+                img_buf_density.seek(0)
+                plot_density_data = base64.b64encode(img_buf_density.read()).decode('utf-8')
+                plt.close(fig_density)
+
+            # Retornar template con todos los plots generados
+            return render_template("result.html", 
+                                plot1=img_data,
+                                plot2=plot2_data,
+                                plot_conf=plot_conf_data,
+                                plot_density=plot_density_data,
+                                model_name=AVAILABLE_MODELS[selected_model],
+                                has_validation=validation_data is not None)
 
         elif selected_model == 'model2':
             # Crear array con las columnas seleccionadas
@@ -205,7 +341,8 @@ def upload_file():
 
         return render_template("result.html", 
                              plot1=img_data,
-                             plot2=plot2_data if validation_data is not None else None,
+                             plot2=plot2_data,
+                             plot_conf=plot_conf_data,
                              model_name=AVAILABLE_MODELS[selected_model],
                              has_validation=validation_data is not None)
 
@@ -225,6 +362,14 @@ def download_validation_result():
     return send_file(result_path, 
                     as_attachment=True, 
                     download_name="roger_validation_results.dat",
+                    mimetype='text/plain')
+
+@app.route("/download_confusion_matrix")
+def download_confusion_matrix():
+    result_path = os.path.join(UPLOAD_FOLDER, "confusion_matrix.dat")
+    return send_file(result_path, 
+                    as_attachment=True, 
+                    download_name="confusion_matrix.dat",
                     mimetype='text/plain')
 
 if __name__ == "__main__":
