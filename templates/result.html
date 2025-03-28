@@ -4,39 +4,92 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Results - pyROGER</title>
-    <link href="/static/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="/static/custom.css" rel="stylesheet">
 </head>
 <body>
     <div class="container mt-5">
         <div class="row">
-            <div class="col-md-8 offset-md-2">
-                <h2>Analysis Results</h2>
+            <div class="col-md-10 offset-md-1">
+                <h2>Analysis Results using {{ model_name }}</h2>
                 
-                <!-- Results -->
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">Results using {{ model_name }}</h5>
-                        <!-- Matplotlib plot -->
-                        <div class="plot-container text-center mb-4">
-                            <img src="data:image/png;base64,{{ plot1 }}" 
-                                 class="img-fluid" 
-                                 alt="Analysis Plot">
+                <!-- Tabs -->
+                <ul class="nav nav-tabs mb-3" id="resultTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="dataset-tab" data-bs-toggle="tab" 
+                                data-bs-target="#dataset" type="button" role="tab" 
+                                aria-controls="dataset" aria-selected="true">
+                            Dataset Results
+                        </button>
+                    </li>
+                    {% if has_validation %}
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="validation-tab" data-bs-toggle="tab" 
+                                data-bs-target="#validation" type="button" role="tab" 
+                                aria-controls="validation" aria-selected="false">
+                            Validation Results
+                        </button>
+                    </li>
+                    {% endif %}
+                </ul>
+
+                <!-- Tab Content -->
+                <div class="tab-content" id="resultTabsContent">
+                    <!-- Dataset Results Tab -->
+                    <div class="tab-pane fade show active" id="dataset" role="tabpanel" 
+                         aria-labelledby="dataset-tab">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="plot-container text-center mb-4">
+                                    <img src="data:image/png;base64,{{ plot1 }}" 
+                                         class="img-fluid" 
+                                         alt="Dataset Analysis Plot">
+                                </div>
+                                <div class="text-center">
+                                    <a href="{{ url_for('download_result') }}" class="btn btn-primary">
+                                        Download Dataset Results
+                                    </a>
+                                </div>
+                            </div>
                         </div>
-                        <p class="card-text">{{ resultado }}</p>
-                        <a href="{{ url_for('download_result') }}" class="btn btn-primary">
-                            Download Result (.npy)
-                        </a>
-                        <a href="{{ url_for('index') }}" class="btn btn-secondary">
-                            Back to Home
-                        </a>
                     </div>
+
+                    <!-- Validation Results Tab -->
+                    {% if has_validation %}
+                    <div class="tab-pane fade" id="validation" role="tabpanel" 
+                         aria-labelledby="validation-tab">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="plot-container text-center mb-4">
+                                    <img src="data:image/png;base64,{{ plot2 }}" 
+                                         class="img-fluid" 
+                                         alt="Validation Analysis Plot">
+                                </div>
+                                <div class="text-center">
+                                    <a href="{{ url_for('download_validation_result') }}" class="btn btn-success">
+                                        Download Validation Results
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Back Button -->
+                <div class="text-center mt-3">
+                    <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                        Back to Home
+                    </a>
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="/static/jquery-1.11.3.min.js"></script>
-    <script src="/static/bootstrap.min.js"></script>
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html> 

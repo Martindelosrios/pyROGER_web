@@ -115,7 +115,7 @@
                 <div class="col-sm-6">
 	                <h2 id='running' class="section-header">Online Analysis</h2>
                     <div class="upload-section">
-                        <h3>Upload .npy file for analysis</h3>
+                        <h3>Upload Data Files for Analysis</h3>
                         <form action="/upload" method="post" enctype="multipart/form-data" class="form-group">
                             <div class="mb-4">
                                 <label for="modelSelect" class="form-label">Select Analysis Model:</label>
@@ -125,36 +125,81 @@
                                     {% endfor %}
                                 </select>
                             </div>
+                            
+                            <!-- Dataset principal -->
                             <div class="mb-4">
-                                <label for="fileInput" class="form-label">Choose File:</label>
+                                <label for="fileInput" class="form-label">Dataset File:</label>
                                 <input type="file" 
                                        id="fileInput" 
                                        name="file" 
-                                       accept=".npy" 
+                                       accept=".npy,.dat" 
                                        class="form-control"
-                                       onchange="handleFileSelect(this)">
+                                       onchange="handleFileSelect(this, 'columnSelectors')" required>
                             </div>
+                            
+                            <!-- Validation Set (opcional) -->
+                            <div class="mb-4">
+                                <label for="validationInput" class="form-label">Validation Set File (Optional):</label>
+                                <input type="file" 
+                                       id="validationInput" 
+                                       name="validation_file" 
+                                       accept=".npy,.dat" 
+                                       class="form-control"
+                                       onchange="handleFileSelect(this, 'validationColumnSelectors')">
+                            </div>
+
+                            <!-- Column Selectors for Dataset -->
                             <div class="mb-4" id="columnSelectors" style="display: none;">
                                 <div class="alert alert-info" role="alert">
-                                    <small>Please select which columns in your data correspond to R/R200 and V/V200 values. 
-                                    By default, columns 3 and 4 are selected.</small>
+                                    <small>Please select which columns in your dataset correspond to R/R200, V/V200, and logM values. 
+                                    By default, columns 3, 4, and 5 are selected.</small>
                                 </div>
                                 <div class="row">
-                                    <div class="col-md-6">
+                                    <div class="col-md-4">
                                         <label for="rColumn" class="form-label">R/R200 Column:</label>
                                         <select class="form-select" id="rColumn" name="r_column">
                                             <!-- Options will be filled dynamically -->
                                         </select>
                                     </div>
-                                    <div class="col-md-6">
+                                    <div class="col-md-4">
                                         <label for="vColumn" class="form-label">V/V200 Column:</label>
                                         <select class="form-select" id="vColumn" name="v_column">
                                             <!-- Options will be filled dynamically -->
                                         </select>
                                     </div>
+                                    <div class="col-md-4">
+                                        <label for="mColumn" class="form-label">logM Column:</label>
+                                        <select class="form-select" id="mColumn" name="m_column">
+                                            <!-- Options will be filled dynamically -->
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
-                            <button type="submit" class="btn btn-primary">Process File</button>
+
+                            <!-- Column Selectors for Validation Set -->
+                            <div class="mb-4" id="validationColumnSelectors" style="display: none;">
+                                <div class="alert alert-info" role="alert">
+                                    <small>Select columns for validation set (same format as training set)</small>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <label for="vRColumn" class="form-label">R/R200 Column:</label>
+                                        <select class="form-select" id="vRColumn" name="validation_r_column">
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="vVColumn" class="form-label">V/V200 Column:</label>
+                                        <select class="form-select" id="vVColumn" name="validation_v_column">
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="vMColumn" class="form-label">logM Column:</label>
+                                        <select class="form-select" id="vMColumn" name="validation_m_column">
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Process Files</button>
                         </form>
                     </div>                  
                 </div>    
@@ -187,57 +232,80 @@
     <script src="/static/custom.js"></script>
 
     <script>
-    function handleFileSelect(input) {
+    function updateColumnSelectors(numCols, columnSelectorsId) {
+        // Determinar qué conjunto de selectores actualizar
+        let rSelect, vSelect, mSelect;
+        if (columnSelectorsId === 'columnSelectors') {
+            rSelect = document.getElementById('rColumn');
+            vSelect = document.getElementById('vColumn');
+            mSelect = document.getElementById('mColumn');
+        } else {
+            rSelect = document.getElementById('vRColumn');
+            vSelect = document.getElementById('vVColumn');
+            mSelect = document.getElementById('vMColumn');
+        }
+
+        // Clear previous options
+        rSelect.innerHTML = '';
+        vSelect.innerHTML = '';
+        mSelect.innerHTML = '';
+        
+        // Add options for each column
+        for (let i = 0; i < numCols; i++) {
+            const option1 = document.createElement('option');
+            const option2 = document.createElement('option');
+            const option3 = document.createElement('option');
+            option1.value = option2.value = option3.value = i;
+            option1.text = option2.text = option3.text = `Column ${i}`;
+            
+            // Set default selections
+            if (i === 3) {
+                option1.selected = true;
+            }
+            if (i === 4) {
+                option2.selected = true;
+            }
+            if (i === 5) {
+                option3.selected = true;
+            }
+            
+            rSelect.appendChild(option1);
+            vSelect.appendChild(option2.cloneNode(true));
+            mSelect.appendChild(option3.cloneNode(true));
+        }
+        
+        // Show the column selectors
+        document.getElementById(columnSelectorsId).style.display = 'block';
+    }
+
+    function handleFileSelect(input, columnSelectorsId) {
         const file = input.files[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                // Leer el archivo como un ArrayBuffer
-                const buffer = e.target.result;
-                
-                // Los primeros 6 bytes del archivo .npy contienen la cabecera
-                // Los siguientes bytes contienen la información de la forma del array
-                const headerLength = new DataView(buffer.slice(8, 10)).getUint8(0);
-                const headerStr = new TextDecoder().decode(new Uint8Array(buffer.slice(10, 10 + headerLength)));
-                
-                // Extraer la forma del array de la cabecera
-                const shapeMatch = headerStr.match(/\'shape\': \((\d+), (\d+)\)/);
-                if (shapeMatch) {
-                    const numRows = parseInt(shapeMatch[1]);
-                    const numCols = parseInt(shapeMatch[2]);
+            if (file.name.endsWith('.npy')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const buffer = e.target.result;
+                    const headerLength = new DataView(buffer.slice(8, 10)).getUint8(0);
+                    const headerStr = new TextDecoder().decode(new Uint8Array(buffer.slice(10, 10 + headerLength)));
                     
-                    // Clear previous options
-                    const rSelect = document.getElementById('rColumn');
-                    const vSelect = document.getElementById('vColumn');
-                    rSelect.innerHTML = '';
-                    vSelect.innerHTML = '';
-                    
-                    // Add options for each column
-                    for (let i = 0; i < numCols; i++) {
-                        const option1 = document.createElement('option');
-                        const option2 = document.createElement('option');
-                        option1.value = option2.value = i;
-                        option1.text = option2.text = `Column ${i}`;
-                        
-                        // Set default selections for R/R200 (column 3) and V/V200 (column 4)
-                        if (i === 3) {
-                            option1.selected = true;
-                        }
-                        if (i === 4) {
-                            option2.selected = true;
-                        }
-                        
-                        rSelect.appendChild(option1);
-                        vSelect.appendChild(option2.cloneNode(true));
+                    const shapeMatch = headerStr.match(/\'shape\': \((\d+), (\d+)\)/);
+                    if (shapeMatch) {
+                        const numRows = parseInt(shapeMatch[1]);
+                        const numCols = parseInt(shapeMatch[2]);
+                        updateColumnSelectors(numCols, columnSelectorsId);
                     }
-                    
-                    // Show the column selectors
-                    document.getElementById('columnSelectors').style.display = 'block';
-                } else {
-                    alert('Invalid .npy file format');
-                }
-            };
-            reader.readAsArrayBuffer(file);
+                };
+                reader.readAsArrayBuffer(file);
+            } else if (file.name.endsWith('.dat')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const text = e.target.result;
+                    const firstLine = text.split('\n')[0];
+                    const numCols = firstLine.trim().split(/\s+/).length;
+                    updateColumnSelectors(numCols, columnSelectorsId);
+                };
+                reader.readAsText(file);
+            }
         }
     }
     </script>
