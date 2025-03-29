@@ -1,24 +1,13 @@
 import os
 import numpy as np
 from flask import Flask, request, render_template, send_file, jsonify
-import matplotlib
-matplotlib.use('Agg')  # Usar backend no interactivo
 import matplotlib.pyplot as plt
-plt.rcParams['figure.dpi'] = 80  # Reducir más el DPI
-plt.rcParams['figure.max_open_warning'] = 50
 import io
 import base64
 import pkg_resources
 import tempfile
-import gc
 from mlxtend.plotting import plot_confusion_matrix
 from scipy.stats import gaussian_kde
-
-# Configurar límites de memoria para numpy
-np.ones(1, dtype=np.float64).nbytes
-import resource
-soft, hard = resource.getrlimit(resource.RLIMIT_AS)
-resource.setrlimit(resource.RLIMIT_AS, (int(500e6), hard))  # Reducir a 500MB
 
 from pyROGER import roger
 from pyROGER import models
@@ -26,10 +15,6 @@ from pyROGER import models
 app = Flask(__name__, 
             template_folder='../templates',
             static_folder='../static')
-
-# Configuraciones de Flask
-app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024  # Reducir a 25MB
-app.config['UPLOAD_FOLDER'] = tempfile.gettempdir()
 
 # Configurar el puerto para Render
 port = int(os.environ.get('PORT', 5000))
@@ -59,54 +44,9 @@ if not os.path.exists(DATA_PATH):
 # Lista de modelos disponibles
 AVAILABLE_MODELS = {
     'model1': 'ROGER_v1 (high mass clusters)',
-    'model2': 'ROGER_v1 (small mass clusters)',
-    'model3': 'ROGER_v2'
+    'model2': 'ROGER_v2',
+    'model3': 'ROGER_v3'
 }
-
-def process_in_batches(data, model, columns, batch_size=250):  # Reducir batch_size
-    """Procesar datos en lotes pequeños"""
-    n_samples = len(data)
-    pred_prob = np.zeros((n_samples, 5))
-    
-    for i in range(0, n_samples, batch_size):
-        end_idx = min(i + batch_size, n_samples)
-        batch = np.column_stack([data[i:end_idx, col] for col in columns])
-        pred_prob[i:end_idx] = model.predict_prob(batch, n_model=0)
-        del batch
-        gc.collect()
-    
-    return pred_prob
-
-def create_plot(data, prob, r_col, v_col, titles, cmaps, dpi=80, max_points=5000):
-    """Crear plot con configuraciones optimizadas y límite de puntos"""
-    if len(data) > max_points:
-        idx = np.random.choice(len(data), max_points, replace=False)
-        plot_data = data[idx]
-        plot_prob = prob[idx]
-    else:
-        plot_data = data
-        plot_prob = prob
-
-    fig, axes = plt.subplots(1, 5, figsize=(10, 2), dpi=dpi)
-    plt.subplots_adjust(wspace=0)
-    
-    for i, ax in enumerate(axes):
-        scatter = ax.scatter(plot_data[:, r_col], 
-                           plot_data[:, v_col],
-                           c=plot_prob[:, i],
-                           cmap=cmaps[i],
-                           s=15)  # Reducir más el tamaño de puntos
-        ax.set_title(titles[i], fontsize=8)
-        ax.tick_params(labelsize=6)
-    
-    plt.tight_layout()
-    
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', bbox_inches='tight', dpi=dpi, 
-                optimize=True, quality=85)  # Comprimir más la imagen
-    buf.seek(0)
-    plt.close(fig)
-    return base64.b64encode(buf.getvalue()).decode('utf-8')
 
 @app.route("/")
 def index():
@@ -114,91 +54,119 @@ def index():
 
 @app.route("/upload", methods=["POST"])
 def upload_file():
-    try:
-        file = request.files["file"]
-        validation_file = request.files.get("validation_file", None)
-        
-        selected_model = request.form.get('model', 'model1')
-        columns = [
-            int(request.form.get('r_column', 3)),
-            int(request.form.get('v_column', 4)),
-            int(request.form.get('m_column', 5))
-        ]
-        
-        v_columns = [
-            int(request.form.get('validation_r_column', columns[0])),
-            int(request.form.get('validation_v_column', columns[1])),
-            int(request.form.get('validation_m_column', columns[2]))
-        ]
-        real_class_column = int(request.form.get('real_class_column', 0))
+    file = request.files["file"]
+    validation_file = request.files.get("validation_file", None)
+    
+    selected_model = request.form.get('model', 'model1')
+    
+    # Columnas para el set de entrenamiento
+    r_column = int(request.form.get('r_column', 3))
+    v_column = int(request.form.get('v_column', 4))
+    m_column = int(request.form.get('m_column', 5))
+    
+    # Columnas para el set de validación
+    v_r_column = int(request.form.get('validation_r_column', r_column))
+    v_v_column = int(request.form.get('validation_v_column', v_column))
+    v_m_column = int(request.form.get('validation_m_column', m_column))
+    real_class_column = int(request.form.get('real_class_column', 0))
 
-        titles = ['$P_{CL}$', '$P_{BS}$', '$P_{RIN}$', '$P_{IN}$', '$P_{ITL}$']
-        cmaps = ['Reds', 'Oranges', 'Greens', 'Blues', 'Greys']
+    # Definir variables para plotting
+    titles = ['$P_{CL}$', '$P_{BS}$', '$P_{RIN}$', '$P_{IN}$', '$P_{ITL}$']
+    cmaps = ['Reds', 'Oranges', 'Greens', 'Blues', 'Greys']
 
-        if not file or not file.filename.endswith(('.npy', '.dat')):
-            return "Invalid format. Please upload a .npy or .dat file"
+    # Variables para almacenar plots
+    img_data = None
+    plot2_data = None
+    plot_conf_data = None
+    plot_density_data = None
 
-        # Procesar archivo principal
+    if file and (file.filename.endswith(".npy") or file.filename.endswith(".dat")):
         filepath = os.path.join(UPLOAD_FOLDER, file.filename)
         file.save(filepath)
         
-        try:
-            data = np.load(filepath, mmap_mode='r') if file.filename.endswith('.npy') else np.loadtxt(filepath)
-        except Exception as e:
-            return f"Error loading file: {str(e)}"
-        finally:
-            os.remove(filepath)
-        
-        # Procesar modelo con manejo de memoria más agresivo
-        if selected_model == 'model1':
-            models.HighMassRoger1.train(path_to_saved_model=[
-                os.path.join(DATA_PATH, 'HighMassRoger1_KNN.joblib')
-            ])  # Cargar solo un modelo en lugar de tres
-            
-            pred_prob = process_in_batches(data, models.HighMassRoger1, columns[:2])
-            pred_prob[:, [2, 1]] = pred_prob[:, [1, 2]]
-            gc.collect()
-        
-        elif selected_model == 'model2':
-            models.Roger2.train(path_to_saved_model=[
-                os.path.join(DATA_PATH, 'roger2_KNN.joblib')
-            ])
-            pred_prob = process_in_batches(data, models.Roger2, columns)
-            gc.collect()
-        
-        # Crear y guardar plot principal
-        img_data = create_plot(data, pred_prob, columns[0], columns[1], titles, cmaps)
-        
-        # Guardar resultados
-        result_path = os.path.join(UPLOAD_FOLDER, "resultado.dat")
-        np.savetxt(result_path, pred_prob, fmt='%.6f', header="P_CL P_BS P_RIN P_IN P_ITL")
-        
-        # Variables para validación
-        plot2_data = plot_conf_data = plot_density_data = None
-        has_validation = False
-        
-        # Procesar validación si existe
-        if validation_file and validation_file.filename.endswith(('.npy', '.dat')):
-            has_validation = True
-            val_filepath = os.path.join(UPLOAD_FOLDER, validation_file.filename)
-            
+        if file.filename.endswith(".npy"):
+            data = np.load(filepath)
+        else:
+            data = np.loadtxt(filepath)
+
+        # Procesar archivo de validación si existe
+        validation_data = None
+        if validation_file and (validation_file.filename.endswith(".npy") or validation_file.filename.endswith(".dat")):
             try:
-                validation_data = (np.load(val_filepath, mmap_mode='r') if validation_file.filename.endswith('.npy') 
-                                 else np.loadtxt(val_filepath))
-                real_classes = validation_data[:, real_class_column].copy()
+                val_filepath = os.path.join(UPLOAD_FOLDER, validation_file.filename)
+                validation_file.save(val_filepath)
                 
-                # Procesar validación en lotes
-                if selected_model == 'model1':
-                    val_pred_prob = process_in_batches(validation_data, models.HighMassRoger1, v_columns[:2])
-                    val_pred_prob[:, [2, 1]] = val_pred_prob[:, [1, 2]]
+                if validation_file.filename.endswith(".npy"):
+                    validation_data = np.load(val_filepath)
                 else:
-                    val_pred_prob = process_in_batches(validation_data, models.Roger2, v_columns)
+                    validation_data = np.loadtxt(val_filepath)
                 
-                # Crear plots de validación con DPI reducido
-                plot2_data = create_plot(validation_data, val_pred_prob, v_columns[0], v_columns[1], 
-                                       titles, cmaps, dpi=80)
+                # Verificar que existe la columna real_class
+                if real_class_column >= validation_data.shape[1]:
+                    raise ValueError("Validation set must contain a 'real class' column")
                 
-                # Crear plot de matriz de confusión
+                real_classes = validation_data[:, real_class_column]
+                
+            except Exception as e:
+                return f"Error processing validation file: {str(e)}"
+
+        # Aplicar el modelo seleccionado
+        if selected_model == 'model1':
+            # Crear array con las columnas seleccionadas
+            selected_data = np.column_stack((data[:, r_column], 
+                                       data[:, v_column]))  # Agregamos logM
+            models.HighMassRoger1.train(path_to_saved_model = [DATA_PATH + '/HighMassRoger1_KNN.joblib',
+                                                               DATA_PATH + '/HighMassRoger1_RF.joblib',
+                                                               DATA_PATH + '/HighMassRoger1_SVM.joblib'])
+            # Usar ROGER para clusters masivos
+            pred_class = models.HighMassRoger1.predict_class(selected_data, n_model=0)
+            pred_prob = models.HighMassRoger1.predict_prob(selected_data, n_model=0)
+            
+            # Intercambiar columnas 2 y 3
+            pred_prob[:, [2, 1]] = pred_prob[:, [1, 2]]
+            
+            plot_title = 'ROGER Analysis - High Mass Clusters'
+            
+            # Crear plots para el dataset principal
+            fig, axes = plt.subplots(1, 5, figsize=(10, 2), sharey=True, sharex=True)
+            plt.subplots_adjust(wspace=0) 
+            
+            # Crear los 5 paneles
+            for i, ax in enumerate(axes):
+                scatter = ax.scatter(data[:, r_column], 
+                                   data[:, v_column],
+                                   cmap=cmaps[i],
+                                   c=pred_prob[:,i],
+                                   s=50)
+                ax.set_title(titles[i])
+                ax.set_xlabel('R/R200')
+                ax.grid(True)
+                
+                ax.set_xlim(0, max(data[:, r_column])*1.1)
+                ax.set_ylim(min(data[:, v_column])*1.1, max(data[:, v_column])*1.1)
+                ax.set_ylabel('')
+            axes[0].set_ylabel('V/V200')
+            plt.tight_layout()
+
+            # Save plot to buffer
+            img_buf = io.BytesIO()
+            plt.savefig(img_buf, format='png', bbox_inches='tight', dpi=300)
+            img_buf.seek(0)
+            img_data = base64.b64encode(img_buf.read()).decode('utf-8')
+            plt.close()
+
+            # Variables para almacenar plots de validación
+            plot2_data = None
+            plot_conf_data = None
+            plot_density_data = None
+
+            # Si hay datos de validación, procesarlos
+            if validation_data is not None:
+                val_selected_data = np.column_stack((validation_data[:, v_r_column], 
+                                                   validation_data[:, v_v_column]))
+                val_pred_prob = models.HighMassRoger1.predict_prob(val_selected_data, n_model=0)
+                val_pred_prob[:, [2, 1]] = val_pred_prob[:, [1, 2]]
+                
                 conf_mat, pred_class = models.HighMassRoger1.confusion_matrix(
                     thresholds=np.array([0.5, 0.5, 0.5, 0.5, 0.5]),
                     pred_prob=val_pred_prob,
@@ -222,6 +190,40 @@ def upload_file():
                 plot_conf_data = base64.b64encode(img_buf_conf.read()).decode('utf-8')
                 plt.close(fig_conf)
 
+                # Crear plot para datos de validación
+                fig2, axes2 = plt.subplots(1, 5, figsize=(10, 2), sharey=True, sharex=True)
+                plt.subplots_adjust(wspace=0)
+                
+                for i, ax in enumerate(axes2):
+                    scatter = ax.scatter(validation_data[:, v_r_column], 
+                                       validation_data[:, v_v_column],
+                                       cmap=cmaps[i],
+                                       c=val_pred_prob[:,i],
+                                       s=50)
+                    ax.set_title(titles[i])
+                    ax.set_xlabel('R/R200')
+                    ax.grid(True)
+                    ax.set_xlim(0, max(validation_data[:, v_r_column])*1.1)
+                    ax.set_ylim(min(validation_data[:, v_v_column])*1.1, 
+                               max(validation_data[:, v_v_column])*1.1)
+                    ax.set_ylabel('')
+                axes2[0].set_ylabel('V/V200')
+                plt.tight_layout()
+
+                # Save validation plot to buffer
+                img_buf2 = io.BytesIO()
+                plt.savefig(img_buf2, format='png', bbox_inches='tight', dpi=300)
+                img_buf2.seek(0)
+                plot2_data = base64.b64encode(img_buf2.read()).decode('utf-8')
+                plt.close(fig2)
+
+                # Guardar resultados de validación incluyendo real_class
+                val_result_path = os.path.join(UPLOAD_FOLDER, "validation_resultado.dat")
+                header = "real_class P_CL P_BS P_RIN P_IN P_ITL"
+                # Combinar real_class con probabilidades
+                val_results = np.column_stack((real_classes, val_pred_prob))
+                np.savetxt(val_result_path, val_results, fmt='%.6f', header=header)
+
                 # Crear plots de densidad por clase
                 fig_density = plt.figure(figsize=(15, 3))
                 class_names = ['CL', 'BS', 'RIN', 'IN', 'ITL']
@@ -238,9 +240,9 @@ def upload_file():
                     axes.append(ax)
 
                 # Establecer límites comunes para todos los plots
-                x_max = max(validation_data[:, v_columns[0]])*1.1
-                y_min = min(validation_data[:, v_columns[1]])*1.1
-                y_max = max(validation_data[:, v_columns[1]])*1.1
+                x_max = max(validation_data[:, v_r_column])*1.1
+                y_min = min(validation_data[:, v_v_column])*1.1
+                y_max = max(validation_data[:, v_v_column])*1.1
 
                 # Aplicar límites a todos los axes
                 for ax in axes:
@@ -252,8 +254,8 @@ def upload_file():
                     mask = real_classes == (i+1)
                     if np.any(mask):  # Solo si hay datos para esta clase
                         # Datos para la clase actual
-                        x = validation_data[mask, v_columns[0]]
-                        y = validation_data[mask, v_columns[1]]
+                        x = validation_data[mask, v_r_column]
+                        y = validation_data[mask, v_v_column]
                         
                         # Calcular la densidad
                         xy = np.vstack([x, y])
@@ -278,23 +280,216 @@ def upload_file():
                 plot_density_data = base64.b64encode(img_buf_density.read()).decode('utf-8')
                 plt.close(fig_density)
 
-            finally:
-                if os.path.exists(val_filepath):
-                    os.remove(val_filepath)
+        elif selected_model == 'model2':
+            # Cargar ROGER2
+            models.Roger2.train(path_to_saved_model=[DATA_PATH + '/roger2_KNN.joblib'])
+
+            # Crear array con las columnas seleccionadas (logM, R, V)
+            selected_data = np.column_stack((data[:, m_column],
+                                           data[:, r_column], 
+                                           data[:, v_column]))
+            
+            # Aplicar el modelo
+            pred_prob = models.Roger2.predict_prob(selected_data, n_model=0)
+            
+            # Crear plots para el dataset principal
+            fig, axes = plt.subplots(1, 5, figsize=(10, 2), sharey=True, sharex=True)
+            plt.subplots_adjust(wspace=0) 
+            
+            # Crear los 5 paneles
+            for i, ax in enumerate(axes):
+                scatter = ax.scatter(data[:, r_column], 
+                                   data[:, v_column],
+                                   cmap=cmaps[i],
+                                   c=pred_prob[:,i],
+                                   s=50)
+                ax.set_title(titles[i])
+                ax.set_xlabel('R/R200')
+                ax.grid(True)
+                ax.set_xlim(0, max(data[:, r_column])*1.1)
+                ax.set_ylim(min(data[:, v_column])*1.1, max(data[:, v_column])*1.1)
+                ax.set_ylabel('')
+            axes[0].set_ylabel('V/V200')
+            plt.tight_layout()
+
+            # Save plot to buffer
+            img_buf = io.BytesIO()
+            plt.savefig(img_buf, format='png', bbox_inches='tight', dpi=300)
+            img_buf.seek(0)
+            img_data = base64.b64encode(img_buf.read()).decode('utf-8')
+            plt.close()
+
+            # Si hay datos de validación, procesarlos
+            if validation_data is not None:
+                val_selected_data = np.column_stack((validation_data[:, v_m_column],
+                                                   validation_data[:, v_r_column], 
+                                                   validation_data[:, v_v_column]))
+                val_pred_prob = models.Roger2.predict_prob(val_selected_data, n_model=0)
+                
+                conf_mat, pred_class = models.Roger2.confusion_matrix(
+                    thresholds=np.array([0.5, 0.5, 0.5, 0.5, 0.5]),
+                    pred_prob=val_pred_prob,
+                    real_class=real_classes
+                )
+
+                # Guardar matriz de confusión
+                conf_mat_path = os.path.join(UPLOAD_FOLDER, "confusion_matrix.dat")
+                header = "CL BS RIN IN ITL"
+                np.savetxt(conf_mat_path, conf_mat, fmt='%.6f', header=header)
+
+                # Crear plot de matriz de confusión
+                fig_conf = plt.figure(figsize=(8, 6))
+                plot_confusion_matrix(conf_mat, show_absolute=True, show_normed=True,
+                                    class_names=['CL','BS','RIN','IN','ITL'])
+                
+                # Save confusion matrix plot to buffer
+                img_buf_conf = io.BytesIO()
+                plt.savefig(img_buf_conf, format='png', bbox_inches='tight', dpi=300)
+                img_buf_conf.seek(0)
+                plot_conf_data = base64.b64encode(img_buf_conf.read()).decode('utf-8')
+                plt.close(fig_conf)
+
+                # Crear plot para datos de validación
+                fig2, axes2 = plt.subplots(1, 5, figsize=(10, 2), sharey=True, sharex=True)
+                plt.subplots_adjust(wspace=0)
+                
+                for i, ax in enumerate(axes2):
+                    scatter = ax.scatter(validation_data[:, v_r_column], 
+                                       validation_data[:, v_v_column],
+                                       cmap=cmaps[i],
+                                       c=val_pred_prob[:,i],
+                                       s=50)
+                    ax.set_title(titles[i])
+                    ax.set_xlabel('R/R200')
+                    ax.grid(True)
+                    ax.set_xlim(0, max(validation_data[:, v_r_column])*1.1)
+                    ax.set_ylim(min(validation_data[:, v_v_column])*1.1, 
+                               max(validation_data[:, v_v_column])*1.1)
+                    ax.set_ylabel('')
+                axes2[0].set_ylabel('V/V200')
+                plt.tight_layout()
+
+                # Save validation plot to buffer
+                img_buf2 = io.BytesIO()
+                plt.savefig(img_buf2, format='png', bbox_inches='tight', dpi=300)
+                img_buf2.seek(0)
+                plot2_data = base64.b64encode(img_buf2.read()).decode('utf-8')
+                plt.close(fig2)
+
+                # Guardar resultados de validación incluyendo real_class
+                val_result_path = os.path.join(UPLOAD_FOLDER, "validation_resultado.dat")
+                header = "real_class P_CL P_BS P_RIN P_IN P_ITL"
+                # Combinar real_class con probabilidades
+                val_results = np.column_stack((real_classes, val_pred_prob))
+                np.savetxt(val_result_path, val_results, fmt='%.6f', header=header)
+
+                # Crear plots de densidad por clase
+                fig_density = plt.figure(figsize=(15, 3))
+                class_names = ['CL', 'BS', 'RIN', 'IN', 'ITL']
+                
+                # Crear todos los subplots primero
+                axes = []
+                for i in range(5):
+                    ax = plt.subplot(1, 5, i+1)
+                    ax.set_title(class_names[i])
+                    ax.set_xlabel('R/R200')
+                    if i == 0:  # Solo para el primer plot
+                        ax.set_ylabel('V/V200')
+                    ax.grid(True)
+                    axes.append(ax)
+
+                # Establecer límites comunes para todos los plots
+                x_max = max(validation_data[:, v_r_column])*1.1
+                y_min = min(validation_data[:, v_v_column])*1.1
+                y_max = max(validation_data[:, v_v_column])*1.1
+
+                # Aplicar límites a todos los axes
+                for ax in axes:
+                    ax.set_xlim(0, x_max)
+                    ax.set_ylim(y_min, y_max)
+                
+                # Llenar solo los paneles que tienen datos
+                for i, (class_name, cmap) in enumerate(zip(class_names, cmaps)):
+                    mask = real_classes == (i+1)
+                    if np.any(mask):  # Solo si hay datos para esta clase
+                        # Datos para la clase actual
+                        x = validation_data[mask, v_r_column]
+                        y = validation_data[mask, v_v_column]
+                        
+                        # Calcular la densidad
+                        xy = np.vstack([x, y])
+                        z = gaussian_kde(xy)(xy)
+                        
+                        # Normalizar z para que esté entre 0 y 1
+                        z = (z - z.min()) / (z.max() - z.min())
+                        
+                        # Ordenar los puntos por densidad
+                        idx = z.argsort()
+                        x, y, z = x[idx], y[idx], z[idx]
+                        
+                        # Crear scatter plot usando el mismo colormap que en val_pred_prob
+                        scatter = axes[i].scatter(x, y, c=z, s=50, cmap=cmap)
+
+                plt.tight_layout()
+                
+                # Save density plots to buffer
+                img_buf_density = io.BytesIO()
+                plt.savefig(img_buf_density, format='png', bbox_inches='tight', dpi=300)
+                img_buf_density.seek(0)
+                plot_density_data = base64.b64encode(img_buf_density.read()).decode('utf-8')
+                plt.close(fig_density)
+
+        elif selected_model == 'model3':
+            # Usar ROGER v2
+            roger_model = models.ROGERv2()  # Ejemplo
+            resultado = roger_model.predict(data)
+            plot_title = 'ROGER v2 Analysis'
+
+        # Create matplotlib plot con 5 paneles
+        fig, axes = plt.subplots(1, 5, figsize=(10, 2), sharey=True, sharex=True)
+        plt.subplots_adjust(wspace=0) 
         
-        gc.collect()
+        # Crear los 5 paneles
+        for i, ax in enumerate(axes):
+            scatter = ax.scatter(data[:, r_column], 
+                               data[:, v_column],
+                               cmap=cmaps[i],
+                               c=pred_prob[:,i],
+                               s=50)
+            ax.set_title(titles[i])
+            ax.set_xlabel('R/R200')
+            ax.grid(True)
+            
+            # Mantener los mismos límites en todos los paneles
+            ax.set_xlim(0, max(data[:, r_column])*1.1)
+            ax.set_ylim(min(data[:, v_column])*1.1, max(data[:, v_column])*1.1)
+            ax.set_ylabel('')
+        axes[0].set_ylabel('Vu/V200')
+        plt.tight_layout()
+
+        # Save plot to buffer
+        img_buf = io.BytesIO()
+        plt.savefig(img_buf, format='png', bbox_inches='tight', dpi=300)
+        img_buf.seek(0)
+        img_data = base64.b64encode(img_buf.read()).decode('utf-8')
+        plt.close()
+
+        # Save results
+        result_path = os.path.join(UPLOAD_FOLDER, "resultado.dat")
         
+        # Guardar las probabilidades en formato .dat
+        header = "P_CL P_BS P_RIN P_IN P_ITL"
+        np.savetxt(result_path, pred_prob, fmt='%.6f', header=header)
+
         return render_template("result.html", 
                              plot1=img_data,
                              plot2=plot2_data,
                              plot_conf=plot_conf_data,
                              plot_density=plot_density_data,
                              model_name=AVAILABLE_MODELS[selected_model],
-                             has_validation=has_validation)
+                             has_validation=validation_data is not None)
 
-    except Exception as e:
-        gc.collect()
-        return f"An error occurred: {str(e)}"
+    return "Invalid format. Please upload a .npy or .dat file"
 
 @app.route("/download")
 def download_result():
