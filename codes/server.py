@@ -3,8 +3,8 @@ import numpy as np
 from flask import Flask, request, render_template, send_file, jsonify
 import matplotlib
 matplotlib.use('Agg')  # Usar backend no interactivo
-plt.rcParams['figure.dpi'] = 100  # Reducir DPI de las figuras
 import matplotlib.pyplot as plt
+plt.rcParams['figure.dpi'] = 100  # Reducir DPI de las figuras
 import io
 import base64
 import pkg_resources
