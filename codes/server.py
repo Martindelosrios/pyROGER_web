@@ -4,7 +4,8 @@ from flask import Flask, request, render_template, send_file, jsonify
 import matplotlib
 matplotlib.use('Agg')  # Usar backend no interactivo
 import matplotlib.pyplot as plt
-plt.rcParams['figure.dpi'] = 100  # Reducir DPI de las figuras
+plt.rcParams['figure.dpi'] = 80  # Reducir más el DPI
+plt.rcParams['figure.max_open_warning'] = 50
 import io
 import base64
 import pkg_resources
@@ -14,10 +15,10 @@ from mlxtend.plotting import plot_confusion_matrix
 from scipy.stats import gaussian_kde
 
 # Configurar límites de memoria para numpy
-np.ones(1, dtype=np.float64).nbytes  # Forzar inicialización de numpy
+np.ones(1, dtype=np.float64).nbytes
 import resource
 soft, hard = resource.getrlimit(resource.RLIMIT_AS)
-resource.setrlimit(resource.RLIMIT_AS, (int(1e9), hard))  # Límite de 1GB
+resource.setrlimit(resource.RLIMIT_AS, (int(500e6), hard))  # Reducir a 500MB
 
 from pyROGER import roger
 from pyROGER import models
@@ -27,7 +28,7 @@ app = Flask(__name__,
             static_folder='../static')
 
 # Configuraciones de Flask
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # Límite de 50MB para uploads
+app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024  # Reducir a 25MB
 app.config['UPLOAD_FOLDER'] = tempfile.gettempdir()
 
 # Configurar el puerto para Render
@@ -62,7 +63,7 @@ AVAILABLE_MODELS = {
     'model3': 'ROGER_v2'
 }
 
-def process_in_batches(data, model, columns, batch_size=500):
+def process_in_batches(data, model, columns, batch_size=250):  # Reducir batch_size
     """Procesar datos en lotes pequeños"""
     n_samples = len(data)
     pred_prob = np.zeros((n_samples, 5))
@@ -71,29 +72,38 @@ def process_in_batches(data, model, columns, batch_size=500):
         end_idx = min(i + batch_size, n_samples)
         batch = np.column_stack([data[i:end_idx, col] for col in columns])
         pred_prob[i:end_idx] = model.predict_prob(batch, n_model=0)
+        del batch
         gc.collect()
     
     return pred_prob
 
-def create_plot(data, prob, r_col, v_col, titles, cmaps, dpi=100):
-    """Crear plot con configuraciones optimizadas"""
+def create_plot(data, prob, r_col, v_col, titles, cmaps, dpi=80, max_points=5000):
+    """Crear plot con configuraciones optimizadas y límite de puntos"""
+    if len(data) > max_points:
+        idx = np.random.choice(len(data), max_points, replace=False)
+        plot_data = data[idx]
+        plot_prob = prob[idx]
+    else:
+        plot_data = data
+        plot_prob = prob
+
     fig, axes = plt.subplots(1, 5, figsize=(10, 2), dpi=dpi)
     plt.subplots_adjust(wspace=0)
     
     for i, ax in enumerate(axes):
-        scatter = ax.scatter(data[:, r_col], 
-                           data[:, v_col],
-                           c=prob[:, i],
+        scatter = ax.scatter(plot_data[:, r_col], 
+                           plot_data[:, v_col],
+                           c=plot_prob[:, i],
                            cmap=cmaps[i],
-                           s=20)  # Reducir tamaño de puntos
+                           s=15)  # Reducir más el tamaño de puntos
         ax.set_title(titles[i], fontsize=8)
         ax.tick_params(labelsize=6)
-        
+    
     plt.tight_layout()
     
-    # Guardar plot
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', bbox_inches='tight', dpi=dpi)
+    plt.savefig(buf, format='png', bbox_inches='tight', dpi=dpi, 
+                optimize=True, quality=85)  # Comprimir más la imagen
     buf.seek(0)
     plt.close(fig)
     return base64.b64encode(buf.getvalue()).decode('utf-8')
@@ -139,20 +149,22 @@ def upload_file():
         finally:
             os.remove(filepath)
         
-        # Procesar modelo
+        # Procesar modelo con manejo de memoria más agresivo
         if selected_model == 'model1':
             models.HighMassRoger1.train(path_to_saved_model=[
-                os.path.join(DATA_PATH, 'HighMassRoger1_KNN.joblib'),
-                os.path.join(DATA_PATH, 'HighMassRoger1_RF.joblib'),
-                os.path.join(DATA_PATH, 'HighMassRoger1_SVM.joblib')
-            ])
+                os.path.join(DATA_PATH, 'HighMassRoger1_KNN.joblib')
+            ])  # Cargar solo un modelo en lugar de tres
             
             pred_prob = process_in_batches(data, models.HighMassRoger1, columns[:2])
             pred_prob[:, [2, 1]] = pred_prob[:, [1, 2]]
+            gc.collect()
         
         elif selected_model == 'model2':
-            models.Roger2.train(path_to_saved_model=[os.path.join(DATA_PATH, 'roger2_KNN.joblib')])
+            models.Roger2.train(path_to_saved_model=[
+                os.path.join(DATA_PATH, 'roger2_KNN.joblib')
+            ])
             pred_prob = process_in_batches(data, models.Roger2, columns)
+            gc.collect()
         
         # Crear y guardar plot principal
         img_data = create_plot(data, pred_prob, columns[0], columns[1], titles, cmaps)
